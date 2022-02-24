@@ -2,8 +2,8 @@ from flask import request, jsonify
 from http import HTTPStatus
 from app.models.user_model import User
 from sqlalchemy.exc import IntegrityError
-from app.configs.auth import auth
 from app.configs.database import db
+from flask_jwt_extended import (create_access_token, get_jwt_identity, jwt_required)
 
 def create_user():
     try:
@@ -30,24 +30,25 @@ def login():
     found_user: User = User.query.filter_by(email=user_data["email"]).first()
     
     if not found_user:
-        return {"message": 'User not found'}, HTTPStatus.UNAUTHORIZED
+        return {"message": 'User not found'}, HTTPStatus.NOT_FOUND
     
-    if found_user.verify_password(user_data["password"]):
-        return {"api_key": found_user.api_key}, HTTPStatus.OK
-    else:
+    if not found_user.verify_password(user_data["password"]):
         return {"message": "Wrong password"}, HTTPStatus.UNAUTHORIZED
+
+    token = create_access_token(found_user)
     
-@auth.login_required
+    return {'access_token': token}, HTTPStatus.OK
+    
+@jwt_required()
 def get_user():
-    if auth.current_user() != 'Not Found':
-        return jsonify(auth.current_user()), HTTPStatus.OK
-    else:
-        return {'error': 'user not found'}, HTTPStatus.NOT_FOUND
+    user = get_jwt_identity()
+    
+    return jsonify(user), HTTPStatus.OK
   
-@auth.login_required  
+@jwt_required()  
 def put_user():
     user_data = request.get_json()
-    user = auth.current_user()
+    user = get_jwt_identity()
     
     password = user_data.pop('password')
     
@@ -61,9 +62,9 @@ def put_user():
     
     return jsonify(user), HTTPStatus.OK
 
-@auth.login_required
+@jwt_required()
 def delete_user():
-    user = auth.current_user()
+    user = get_jwt_identity()
     
     db.session.delete(user)
     db.session.commit()
